@@ -126,8 +126,8 @@ class HandsDataset(utils.Dataset):
             # Unfortunately, VIA doesn't include it in JSON, so we must read
             # the image. This is only managable since the dataset is tiny.
             
-			image_path = os.path.join(dataset_dir, a['filename'])
-			## Commented by MG - Egohands datasets images are consistent in terms of pixel size (1280*720)
+            image_path = os.path.join(dataset_dir, a['filename'])
+            ## Commented by MG - Egohands datasets images are consistent in terms of pixel size (1280*720)
             ##image = skimage.io.imread(image_path)
             ##height, width = image.shape[:2]
             
