@@ -1,25 +1,30 @@
 """
 Mask R-CNN
-Train on the Egohands dataset to create mask for filtering out background excepting hands.
+Train on the toy Hand dataset and implement color splash effect.
+
+Copyright (c) 2018 Matterport, Inc.
+Licensed under the MIT License (see LICENSE for details)
+Written by Waleed Abdulla
 
 ------------------------------------------------------------
 
-Usage: the command line as such:
+Usage: import the module (see Jupyter notebooks for examples), or run from
+       the command line as such:
 
     # Train a new model starting from pre-trained COCO weights
-    python3 hands.py train --dataset=/path/to/hands/dataset --weights=coco
+    python3 hand.py train --dataset=/path/to/hand/dataset --weights=coco
 
     # Resume training a model that you had trained earlier
-    python3 hands.py train --dataset=/path/to/hands/dataset --weights=last
+    python3 hand.py train --dataset=/path/to/hand/dataset --weights=last
 
     # Train a new model starting from ImageNet weights
-    python3 hands.py train --dataset=/path/to/hands/dataset --weights=imagenet
+    python3 hand.py train --dataset=/path/to/hand/dataset --weights=imagenet
 
-    # Apply hands filtering on an image
-    python3 hands.py mask --weights=/path/to/weights/file.h5 --image=<URL or path to file>
+    # Apply color splash to an image
+    python3 hand.py splash --weights=/path/to/weights/file.h5 --image=<URL or path to file>
 
-    # Apply hands filtering to video using the last weights you trained
-    python3 hands.py mask --weights=last --video=<URL or path to file>
+    # Apply color splash to video using the last weights you trained
+    python3 hand.py splash --weights=last --video=<URL or path to file>
 """
 
 import os
@@ -49,40 +54,40 @@ DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 ############################################################
 
 
-class HandsConfig(Config):
+class HandConfig(Config):
     """Configuration for training on the toy  dataset.
     Derives from the base Config class and overrides some values.
     """
     # Give the configuration a recognizable name
-    NAME = "hands"
+    NAME = "hand"
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
-    IMAGES_PER_GPU = 2
+    IMAGES_PER_GPU = 1
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 1  # Background + hands
+    NUM_CLASSES = 1 + 1  # Background + hand
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 100
 
     # Skip detections with < 90% confidence
-    DETECTION_MIN_CONFIDENCE = 0.9
+    DETECTION_MIN_CONFIDENCE = 0.8
 
 
 ############################################################
 #  Dataset
 ############################################################
 
-class HandsDataset(utils.Dataset):
+class HandDataset(utils.Dataset):
 
-    def load_hands(self, dataset_dir, subset):
-        """Load a subset of the hands dataset.
+    def load_hand(self, dataset_dir, subset):
+        """Load a subset of the Hand dataset.
         dataset_dir: Root directory of the dataset.
         subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("hands", 1, "hands")
+        self.add_class("hand", 1, "hand")
 
         # Train or validation dataset?
         assert subset in ["train", "val"]
@@ -125,18 +130,12 @@ class HandsDataset(utils.Dataset):
             # load_mask() needs the image size to convert polygons to masks.
             # Unfortunately, VIA doesn't include it in JSON, so we must read
             # the image. This is only managable since the dataset is tiny.
-            
             image_path = os.path.join(dataset_dir, a['filename'])
-            ## Commented by MG - Egohands datasets images are consistent in terms of pixel size (1280*720)
-            ##image = skimage.io.imread(image_path)
-            ##height, width = image.shape[:2]
-            
-            ## Egohands datasets images are consistent in terms of pixel size
-            height = 720
-            width = 1280
+            image = skimage.io.imread(image_path)
+            height, width = image.shape[:2]
 
             self.add_image(
-                "hands",
+                "hand",
                 image_id=a['filename'],  # use file name as a unique image id
                 path=image_path,
                 width=width, height=height,
@@ -149,9 +148,9 @@ class HandsDataset(utils.Dataset):
             one mask per instance.
         class_ids: a 1D array of class IDs of the instance masks.
         """
-        # If not a hands dataset image, delegate to parent class.
+        # If not a hand dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        if image_info["source"] != "hands":
+        if image_info["source"] != "hand":
             return super(self.__class__, self).load_mask(image_id)
 
         # Convert polygons to a bitmap mask of shape
@@ -171,7 +170,7 @@ class HandsDataset(utils.Dataset):
     def image_reference(self, image_id):
         """Return the path of the image."""
         info = self.image_info[image_id]
-        if info["source"] == "hands":
+        if info["source"] == "hand":
             return info["path"]
         else:
             super(self.__class__, self).image_reference(image_id)
@@ -180,13 +179,13 @@ class HandsDataset(utils.Dataset):
 def train(model):
     """Train the model."""
     # Training dataset.
-    dataset_train = HandsDataset()
-    dataset_train.load_hands(args.dataset, "train")
+    dataset_train = HandDataset()
+    dataset_train.load_hand(args.dataset, "train")
     dataset_train.prepare()
 
     # Validation dataset
-    dataset_val = HandsDataset()
-    dataset_val.load_hands(args.dataset, "val")
+    dataset_val = HandDataset()
+    dataset_val.load_hand(args.dataset, "val")
     dataset_val.prepare()
 
     # *** This training schedule is an example. Update to your needs ***
@@ -220,12 +219,12 @@ def color_splash(image, mask):
     return splash
 
 
-def detect_and_filter(model, image_path=None, video_path=None):
+def detect_and_color_splash(model, image_path=None, video_path=None):
     assert image_path or video_path
 
     # Image or video?
     if image_path:
-        # Run model detection and apply mask to filter background
+        # Run model detection and generate the color splash effect
         print("Running on {}".format(args.image))
         # Read image
         image = skimage.io.imread(args.image)
@@ -281,13 +280,13 @@ if __name__ == '__main__':
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description='Train Mask R-CNN to detect handss.')
+        description='Train Mask R-CNN to detect hands.')
     parser.add_argument("command",
                         metavar="<command>",
-                        help="'train' or 'mask'")
+                        help="'train' or 'splash'")
     parser.add_argument('--dataset', required=False,
-                        metavar="/path/to/hands/dataset/",
-                        help='Directory of the hands dataset')
+                        metavar="/path/to/hand/dataset/",
+                        help='Directory of the Hand dataset')
     parser.add_argument('--weights', required=True,
                         metavar="/path/to/weights.h5",
                         help="Path to weights .h5 file or 'coco'")
@@ -297,18 +296,18 @@ if __name__ == '__main__':
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--image', required=False,
                         metavar="path or URL to image",
-                        help='Image to apply the mask effect on')
+                        help='Image to apply the color splash effect on')
     parser.add_argument('--video', required=False,
                         metavar="path or URL to video",
-                        help='Video to apply the mask effect on')
+                        help='Video to apply the color splash effect on')
     args = parser.parse_args()
 
     # Validate arguments
     if args.command == "train":
         assert args.dataset, "Argument --dataset is required for training"
-    elif args.command == "mask":
+    elif args.command == "splash":
         assert args.image or args.video,\
-               "Provide --image or --video to apply mask"
+               "Provide --image or --video to apply color splash"
 
     print("Weights: ", args.weights)
     print("Dataset: ", args.dataset)
@@ -316,9 +315,9 @@ if __name__ == '__main__':
 
     # Configurations
     if args.command == "train":
-        config = HandsConfig()
+        config = HandConfig()
     else:
-        class InferenceConfig(HandsConfig):
+        class InferenceConfig(HandConfig):
             # Set batch size to 1 since we'll be running inference on
             # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
             GPU_COUNT = 1
@@ -363,9 +362,9 @@ if __name__ == '__main__':
     # Train or evaluate
     if args.command == "train":
         train(model)
-    elif args.command == "mask":
-        detect_and_filter(model, image_path=args.image,
+    elif args.command == "splash":
+        detect_and_color_splash(model, image_path=args.image,
                                 video_path=args.video)
     else:
         print("'{}' is not recognized. "
-              "Use 'train' or 'mask'".format(args.command))
+              "Use 'train' or 'splash'".format(args.command))
